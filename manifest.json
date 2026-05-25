@@ -5,12 +5,13 @@
   "display": "standalone",
   "background_color": "#f5f3f0",
   "theme_color": "#f5f3f0",
-  "description": "WakeUp 风格课程表",
+  "description": "课程表",
   "icons": [
     {
-      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📚</text></svg>",
-      "sizes": "100x100",
-      "type": "image/svg+xml"
+      "src": "launchericon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
     }
   ]
 }
