@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=2.0, user-scalable=yes, viewport-fit=cover">
+  <title>课程表 · 广东金融学院</title>
+
+  <!-- ========== PWA 核心配置 ========== -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="课程表">
+  <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📚</text></svg>">
+  <meta name="theme-color" content="#f5f3f0">
+
+  <style>
+    :root {
+      --bg: #f5f3f0; --card-bg: #ffffff; --text: #2c2c2c; --text-secondary: #6b6b6b;
+      --border: #e2ded8; --shadow: 0 2px 12px rgba(0,0,0,0.05); --radius: 14px;
+      --accent: #5b7fff; --accent-import: #ff9100; --danger: #e05555; --time-line: #ff5e5e;
+      --today-bg: #fffdf5; --hover-row: #faf9f7; --transition: 0.2s;
+      --node-height: clamp(50px, 8vh, 68px); --time-col-width: clamp(50px, 10vw, 72px);
+      --font-xs: clamp(0.5rem, 1.5vw, 0.65rem); --font-sm: clamp(0.6rem, 1.8vw, 0.75rem);
+      --font-md: clamp(0.7rem, 2.2vw, 0.9rem);
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      background: var(--bg); color: var(--text); min-height: 100vh;
+      display: flex; flex-direction: column; -webkit-font-smoothing: antialiased; user-select: none;
+    }
+    .navbar {
+      background: var(--card-bg); border-bottom:1px solid var(--border); padding: 8px 16px;
+      display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap;
+      position:sticky; top:0; z-index:100; box-shadow:0 1px 6px rgba(0,0,0,0.03);
+    }
+    .nav-icons { display:flex; align-items:center; gap:10px; }
+    .nav-icon-btn {
+      width:38px; height:38px; border-radius:12px; border:none; background:#f3f1ed;
+      cursor:pointer; font-size:20px; display:flex; align-items:center; justify-content:center;
+      transition:var(--transition);
+    }
+    .nav-icon-btn:hover { background:#e8e5e0; }
+    .week-controls { display:flex; align-items:center; gap:4px; background:#f3f1ed; border-radius:24px; padding:3px 8px; }
+    .week-controls button { width:30px; height:30px; border-radius:50%; border:none; background:#fff; cursor:pointer; font-size:14px; color:#555; display:flex; align-items:center; justify-content:center; box-shadow:0 1px 3px rgba(0,0,0,0.04); }
+    .week-label { font-weight:600; font-size:var(--font-sm); min-width:70px; text-align:center; color:#444; white-space:nowrap; }
+    .today-btn { font-size:var(--font-xs); font-weight:600; border-radius:20px; padding:8px 18px; background:#fff; border:none; cursor:pointer; white-space:nowrap; min-width:80px; text-align:center; box-shadow:0 1px 3px rgba(0,0,0,0.04); }
+    .action-btns { display:flex; gap:6px; }
+    .btn { padding:8px 14px; border-radius:24px; border:none; font-weight:600; font-size:var(--font-xs); cursor:pointer; transition:var(--transition); white-space:nowrap; display:flex; align-items:center; gap:4px; }
+    .btn-add { background:var(--accent); color:#fff; }
+    .btn-import { background:var(--accent-import); color:#fff; }
+    .main-container { flex:1; padding:8px 10px 16px; max-width:1200px; margin:0 auto; width:100%; display:flex; flex-direction:column; }
+    .schedule-wrapper { background:var(--card-bg); border-radius:var(--radius); box-shadow:var(--shadow); overflow:hidden; border:1px solid var(--border); flex:1; display:flex; flex-direction:column; }
+    .schedule-header { display:grid; grid-template-columns: var(--time-col-width) repeat(5, 1fr); border-bottom:1px solid var(--border); background:#fafaf8; }
+    .header-time { padding:6px 4px; text-align:center; font-size:var(--font-xs); font-weight:600; color:var(--text-secondary); border-right:1px solid var(--border); }
+    .header-day { padding:6px 4px; text-align:center; font-size:var(--font-sm); font-weight:600; color:#555; border-right:1px solid #f0ede8; cursor:pointer; }
+    .header-day.today { color:var(--accent); font-weight:700; }
+    .header-day.today::after { content:''; display:block; width:4px; height:4px; background:var(--accent); border-radius:50%; margin:2px auto 0; }
+    .day-date { font-size:var(--font-xs); color:#999; display:block; margin-top:2px; }
+    .schedule-body-container { position:relative; overflow-y:auto; overflow-x:hidden; flex:1; }
+    .schedule-body { display:grid; grid-template-columns: var(--time-col-width) repeat(5, 1fr); position:relative; min-height: calc(var(--node-height) * 12); }
+    .time-column { border-right:1px solid var(--border); background:#fcfcfb; }
+    .time-slot { height:var(--node-height); display:flex; flex-direction:column; align-items:center; justify-content:center; border-bottom:1px solid #f0ede8; }
+    .time-slot .node-num { font-weight:700; font-size:var(--font-md); color:#888; }
+    .time-slot .time-range { font-size:var(--font-xs); color:#aaa; display:flex; flex-direction:column; align-items:center; }
+    .day-column { position:relative; border-right:1px solid #f5f3f0; cursor:pointer; }
+    .day-column.today-col { background:var(--today-bg); }
+    .course-card { position:absolute; left:2px; right:2px; border-radius:6px; padding:3px 4px; cursor:pointer; z-index:5; border:1px solid rgba(0,0,0,0.06); color:white; text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000; font-size:var(--font-xs); overflow:hidden; display:flex; flex-direction:column; }
+    .course-card.conflict { background-image:repeating-linear-gradient(45deg, rgba(255,255,0,0.5) 0px, rgba(255,255,0,0.5) 6px, rgba(255,255,0,0.8) 6px, rgba(255,255,0,0.8) 12px); }
+    .course-name { font-weight:700; font-size:var(--font-sm); }
+    .course-detail { font-size:var(--font-xs); }
+    .current-time-line { position:absolute; left:0; right:0; height:2px; background:var(--time-line); z-index:15; pointer-events:none; }
+    .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.35); z-index:200; display:flex; align-items:center; justify-content:center; backdrop-filter:blur(2px); }
+    .modal { background:#fff; border-radius:var(--radius); box-shadow:0 8px 30px rgba(0,0,0,0.12); width:90%; max-width:480px; padding:20px 18px; max-height:85vh; overflow-y:auto; animation:slideUp 0.25s; }
+    @keyframes slideUp { from { transform:translateY(30px); opacity:0; } to { transform:translateY(0); opacity:1; } }
+    .modal h3 { margin-bottom:14px; font-weight:700; font-size:var(--font-md); }
+    .form-group { margin-bottom:10px; }
+    .form-group label { display:block; font-size:var(--font-xs); font-weight:600; color:#666; margin-bottom:3px; }
+    .form-group input, .form-group select, .modal textarea { width:100%; padding:8px 10px; border:1.5px solid #e5e3de; border-radius:10px; font-size:var(--font-sm); background:#fafaf9; font-family:inherit; }
+    .form-row { display:flex; gap:8px; }
+    .form-row .form-group { flex:1; }
+    .color-options { display:flex; gap:8px; flex-wrap:wrap; }
+    .color-option { width:28px; height:28px; border-radius:50%; cursor:pointer; border:2.5px solid transparent; }
+    .color-option.active { border-color:#333; }
+    .modal-actions { display:flex; gap:8px; margin-top:16px; justify-content:flex-end; flex-wrap:wrap; }
+    .btn-danger { background:#fff0f0; color:var(--danger); }
+    .btn-ghost { background:#f5f4f1; color:#555; }
+    .list-item { display:flex; justify-content:space-between; align-items:center; padding:12px; border-bottom:1px solid #eee; cursor:pointer; border-radius:8px; }
+    .list-item.active { background:#eef1ff; }
+    .list-item:hover { background:#f5f5f5; }
+    .toast { position:fixed; bottom:30px; left:50%; transform:translateX(-50%); background:#333; color:#fff; padding:8px 20px; border-radius:20px; font-size:var(--font-xs); z-index:300; transition:0.3s; opacity:0; }
+    .toast.show { opacity:1; }
+  </style>
+</head>
+<body>
+<nav class="navbar">
+  <div class="nav-icons">
+    <button class="nav-icon-btn" id="timeTableBtn" title="时间表管理">🕒</button>
+    <button class="nav-icon-btn" id="courseTableBtn" title="课表管理">📖</button>
+  </div>
+  <div class="week-controls">
+    <button id="prevWeekBtn">◀</button>
+    <span class="week-label" id="weekLabel">第 1 周</span>
+    <button id="nextWeekBtn">▶</button>
+    <button class="today-btn" id="todayBtn">📌 本周</button>
+  </div>
+  <div class="action-btns">
+    <button class="btn btn-add" id="addCourseBtn">＋ 添加</button>
+    <button class="btn btn-import" id="importShareBtn">📤 导入/分享</button>
+  </div>
+</nav>
+
+<div class="main-container">
+  <div class="schedule-wrapper">
+    <div class="schedule-header" id="scheduleHeader"><div class="header-time">节次</div></div>
+    <div class="schedule-body-container" id="scheduleBodyContainer">
+      <div class="schedule-body" id="scheduleBody"><div class="time-column" id="timeColumn"></div></div>
+      <div class="current-time-line" id="currentTimeLine"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 时间表管理模态框 -->
+<div class="modal-overlay" id="timeTableModal" style="display:none;">
+  <div class="modal"><h3>🕒 时间表管理</h3><div id="timeTableList"></div><button class="btn btn-add" id="newTimeTableBtn">＋ 新建时间表</button><div class="modal-actions"><button class="btn btn-ghost" id="closeTimeTableBtn">关闭</button></div></div>
+</div>
+<!-- 时间表编辑模态框 -->
+<div class="modal-overlay" id="editTimeTableModal" style="display:none;">
+  <div class="modal"><h3>✏️ 编辑时间表</h3><input type="hidden" id="editTimeTableId"><div class="form-group"><label>名称</label><input type="text" id="editTimeTableName"></div><div id="editTimeNodesContainer"></div><button class="btn btn-add" id="addTimeNodeBtn">＋ 添加节次</button><div class="modal-actions"><button class="btn btn-danger" id="deleteTimeTableBtn">删除</button><button class="btn btn-ghost" id="cancelEditTimeTableBtn">取消</button><button class="btn btn-add" id="saveTimeTableBtn">保存</button></div></div>
+</div>
+<!-- 课表管理模态框 -->
+<div class="modal-overlay" id="courseTableModal" style="display:none;">
+  <div class="modal"><h3>📖 课表管理</h3><div id="courseTableList"></div><button class="btn btn-add" id="newCourseTableBtn">＋ 新建课表</button><div class="modal-actions"><button class="btn btn-ghost" id="closeCourseTableBtn">关闭</button></div></div>
+</div>
+<!-- 课表设置模态框 -->
+<div class="modal-overlay" id="editCourseTableModal" style="display:none;">
+  <div class="modal"><h3>📝 课表设置</h3><input type="hidden" id="editCourseTableId"><div class="form-group"><label>课表名称</label><input type="text" id="editCourseTableName"></div><div class="form-group"><label>第一周开始日期</label><input type="date" id="editCourseTableStart"></div><div class="form-group"><label>最大周数</label><input type="number" id="editCourseTableMax" value="20"></div><div class="modal-actions"><button class="btn btn-danger" id="deleteCourseTableBtn">删除</button><button class="btn btn-ghost" id="cancelEditCourseTableBtn">取消</button><button class="btn btn-add" id="saveCourseTableBtn">保存</button></div></div>
+</div>
+<!-- 导入/分享模态框 -->
+<div class="modal-overlay" id="importModal" style="display:none;">
+  <div class="modal"><h3>📤 导入 / 分享数据</h3><textarea id="importData" style="height:100px;" placeholder="粘贴 WakeUp JSON 数据..."></textarea><div class="modal-actions"><button class="btn btn-ghost" id="cancelImportBtn">取消</button><button class="btn btn-add" id="confirmImportBtn">📥 导入为新课程表</button><button class="btn btn-import" id="exportDataBtn">📋 导出并复制</button></div><small style="color:#888;">💡 导出后自动复制到剪贴板，可粘贴到WakeUp</small></div>
+</div>
+<!-- 课程编辑模态框 -->
+<div class="modal-overlay" id="courseModal" style="display:none;">
+  <div class="modal">
+    <h3 id="modalTitle">添加课程</h3>
+    <form id="courseForm">
+      <input type="hidden" id="courseId">
+      <div class="form-group"><label>课程名称</label><input type="text" id="courseName" required></div>
+      <div class="form-row">
+        <div class="form-group"><label>星期</label><select id="courseDay"><option value="1">周一</option><option value="2">周二</option><option value="3">周三</option><option value="4">周四</option><option value="5">周五</option></select></div>
+        <div class="form-group"><label>时间类型</label><select id="timeType"><option value="node">按节次</option><option value="custom">自定义时间</option></select></div>
+      </div>
+      <div id="nodeTimeFields"><div class="form-row"><div class="form-group"><label>开始节次</label><select id="startNode"></select></div><div class="form-group"><label>持续节数</label><input type="number" id="courseStep" value="2" min="1"></div></div></div>
+      <div id="customTimeFields" style="display:none;"><div class="form-row"><div class="form-group"><label>开始时间</label><input type="time" id="startTimeCustom" value="08:00"></div><div class="form-group"><label>结束时间</label><input type="time" id="endTimeCustom" value="09:40"></div></div></div>
+      <div class="form-row"><div class="form-group"><label>教室</label><input type="text" id="courseRoom"></div><div class="form-group"><label>教师</label><input type="text" id="courseTeacher"></div></div>
+      <div class="form-row"><div class="form-group"><label>起始周</label><input type="number" id="startWeek" value="1"></div><div class="form-group"><label>结束周</label><input type="number" id="endWeek" value="16"></div></div>
+      <div class="form-group"><label>重复方式</label><select id="repeatMode"><option value="1">每周</option><option value="2">单周</option><option value="3">双周</option></select></div>
+      <div class="form-group"><label>课程颜色</label><div class="color-options" id="colorOptions"></div></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-danger" id="deleteCourseBtn" style="display:none;">删除</button>
+        <button type="button" class="btn btn-ghost" id="cancelCourseBtn">取消</button>
+        <button type="submit" class="btn btn-add">保存</button>
+      </div>
+    </form>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+  (function() {
+    const PRESET_COLORS = ["#FFB3BA","#FFDFBA","#FFFFBA","#BAFFC9","#BAE1FF","#C5D5FF","#E0D0FF","#FFD4E8","#D5F5E3","#FDEBD0","#D6EAF8","#FADBD8","#E8DAEF","#FCF3CF","#FFD1D1"];
+    const DEFAULT_TIME_TABLES = [
+      { id:'t1', name:'标准节次', nodes:[
+        {node:1,start:"08:15",end:"09:00"},{node:2,start:"09:00",end:"09:45"},
+        {node:3,start:"10:00",end:"10:45"},{node:4,start:"10:45",end:"11:30"},
+        {node:5,start:"11:35",end:"12:20"},{node:6,start:"14:00",end:"14:45"},
+        {node:7,start:"14:45",end:"15:30"},{node:8,start:"15:35",end:"16:20"},
+        {node:9,start:"16:30",end:"17:20"},{node:10,start:"17:30",end:"18:00"},
+        {node:11,start:"19:00",end:"19:45"},{node:12,start:"19:45",end:"20:30"}
+      ]}
+    ];
+    const DEFAULT_COURSE_TABLES = [
+      { id:'c1', name:'默认课表', startDate:'2026-03-02', maxWeek:20, courses:[
+        {id:1,name:"中级财务会计",day:2,startNode:1,step:2,startWeek:1,endWeek:16,repeat:1,room:"北教C406",teacher:"许剑娜",color:"#FFB3BA",startTime:"08:15",endTime:"09:45"},
+        {id:2,name:"财务管理",day:1,startNode:3,step:2,startWeek:9,endWeek:16,repeat:1,room:"北教D306",teacher:"李有福",color:"#FFDFBA",startTime:"10:00",endTime:"11:30"},
+        {id:3,name:"单周测试",day:1,startNode:1,step:2,startWeek:1,endWeek:19,repeat:2,color:"#ff2979ff",startTime:"08:15",endTime:"09:45"},
+        {id:4,name:"双周测试",day:2,startNode:1,step:2,startWeek:2,endWeek:20,repeat:3,color:"#fffa6278",startTime:"08:15",endTime:"09:45"}
+      ]}
+    ];
+
+    let timeTables = JSON.parse(JSON.stringify(DEFAULT_TIME_TABLES));
+    let courseTables = JSON.parse(JSON.stringify(DEFAULT_COURSE_TABLES));
+    let activeTimeTableId = 't1';
+    let activeCourseTableId = 'c1';
+    let currentWeek = 1;
+
+    const $ = s => document.querySelector(s);
+    const timeToMin = t => { const [h,m]=t.split(':'); return +h*60+ +m; };
+    const todayDayIndex = () => { const d=new Date().getDay(); return d===0?6:d-1; };
+
+    function saveData() { localStorage.setItem('tt_multi_v3', JSON.stringify({ timeTables, courseTables, activeTimeTableId, activeCourseTableId })); }
+    function loadData() {
+      const raw = localStorage.getItem('tt_multi_v3');
+      if(raw) {
+        const d = JSON.parse(raw);
+        timeTables = d.timeTables || JSON.parse(JSON.stringify(DEFAULT_TIME_TABLES));
+        courseTables = d.courseTables || JSON.parse(JSON.stringify(DEFAULT_COURSE_TABLES));
+        activeTimeTableId = d.activeTimeTableId || 't1';
+        activeCourseTableId = d.activeCourseTableId || 'c1';
+      }
+    }
+
+    function getActiveTimeTable() { return timeTables.find(t=>t.id===activeTimeTableId) || timeTables[0]; }
+    function getActiveCourseTable() { return courseTables.find(t=>t.id===activeCourseTableId) || courseTables[0]; }
+    function computeCurrentWeek() {
+      const ct = getActiveCourseTable();
+      const start = new Date(ct.startDate);
+      return Math.max(1, Math.min(Math.floor((new Date()-start)/(7*86400000))+1, ct.maxWeek||20));
+    }
+
+    function refreshUI() {
+      renderHeader(); renderTimeColumn(); renderCourses(); updateTimeLine();
+      weekLabel.textContent = `第 ${currentWeek} 周`;
+    }
+    function renderHeader() {
+      const h = $('#scheduleHeader'); h.querySelectorAll('.header-day').forEach(e=>e.remove());
+      const names = ['周一','周二','周三','周四','周五'];
+      for(let d=0; d<5; d++) {
+        const div = document.createElement('div'); div.className='header-day';
+        if(d===todayDayIndex() && currentWeek===computeCurrentWeek()) div.classList.add('today');
+        const ct = getActiveCourseTable();
+        const date = new Date(ct.startDate); date.setDate(date.getDate()+(currentWeek-1)*7+d);
+        div.innerHTML = `${names[d]}<span class="day-date">${date.getMonth()+1}/${date.getDate()}</span>`;
+        h.appendChild(div);
+      }
+    }
+    function renderTimeColumn() {
+      const tt = getActiveTimeTable(); const col = $('#timeColumn'); col.innerHTML='';
+      tt.nodes.forEach(n => {
+        const slot = document.createElement('div'); slot.className='time-slot';
+        slot.innerHTML = `<div class="node-num">${n.node}</div><div class="time-range"><span>${n.start}</span><span>${n.end}</span></div>`;
+        col.appendChild(slot);
+      });
+    }
+    function isRepeatMatch(c) { const r=c.repeat||1; if(r===1) return true; if(r===2) return currentWeek%2===1; if(r===3) return currentWeek%2===0; }
+    function getConflicts() {
+      const ct = getActiveCourseTable();
+      const active = ct.courses.filter(c => currentWeek>=c.startWeek && currentWeek<=c.endWeek && isRepeatMatch(c));
+      const ids = new Set();
+      for(let i=0;i<active.length;i++) {
+        const a=active[i], aS=a.startNode, aE=aS+a.step-1;
+        for(let j=i+1;j<active.length;j++) {
+          const b=active[j]; if(a.day!==b.day) continue;
+          const bS=b.startNode, bE=bS+b.step-1;
+          if(aS<=bE && bS<=aE) { ids.add(a.id); ids.add(b.id); }
+        }
+      }
+      return ids;
+    }
+    function renderCourses() {
+      const body = $('#scheduleBody'); body.querySelectorAll('.day-column').forEach(e=>e.remove());
+      for(let d=0;d<5;d++) {
+        const col = document.createElement('div'); col.className='day-column'; col.dataset.day=d+1;
+        if((d+1)===todayDayIndex()+1 && currentWeek===computeCurrentWeek()) col.classList.add('today-col');
+        body.appendChild(col);
+      }
+      const conflicts = getConflicts(); const nodeH = getNodeHeight();
+      const ct = getActiveCourseTable();
+      ct.courses.filter(c => currentWeek>=c.startWeek && currentWeek<=c.endWeek && isRepeatMatch(c)).forEach(c => {
+        const col = body.querySelector(`.day-column[data-day="${c.day}"]`); if(!col) return;
+        const top = (c.startNode-1)*nodeH, height = c.step*nodeH-2;
+        const card = document.createElement('div'); card.className='course-card';
+        if(conflicts.has(c.id)) card.classList.add('conflict');
+        card.style.backgroundColor=c.color||'#ccc'; card.style.top=top+'px'; card.style.height=Math.max(height,20)+'px';
+        card.innerHTML = `<div class="course-name">${c.name}</div><div class="course-detail">${c.room||''} ${c.teacher||''}</div>`;
+        card.addEventListener('click', e=>{ e.stopPropagation(); openEditModal(c); });
+        col.appendChild(card);
+      });
+    }
+    function getNodeHeight() { const s=$('#timeColumn').querySelector('.time-slot'); return s ? s.offsetHeight : 64; }
+    function updateTimeLine() {
+      const line = $('#currentTimeLine');
+      if(currentWeek!==computeCurrentWeek()) { line.style.display='none'; return; }
+      const now = new Date(); const curMin = now.getHours()*60+now.getMinutes();
+      const nodeH = getNodeHeight(); const tt = getActiveTimeTable();
+      let topPx = -10;
+      for(let i=0;i<tt.nodes.length;i++) {
+        const s = timeToMin(tt.nodes[i].start), e = timeToMin(tt.nodes[i].end);
+        if(curMin>=s && curMin<e) { topPx = (i + (curMin-s)/(e-s)) * nodeH; break; }
+      }
+      if(topPx<0) { line.style.display='none'; return; }
+      line.style.display='block'; line.style.top = topPx+'px';
+      const todayCol = $('#scheduleBody').querySelector(`.day-column[data-day="${todayDayIndex()+1}"]`);
+      if(todayCol) { line.style.left = todayCol.offsetLeft+'px'; line.style.width = todayCol.offsetWidth+'px'; }
+    }
+
+    // ---------- 课程编辑 ----------
+    function openAddModal(day, startNode) {
+      $('#courseId').value = ''; $('#courseDay').value = day||1; $('#timeType').value='node';
+      const tt = getActiveTimeTable();
+      $('#startNode').innerHTML = tt.nodes.map(n=>`<option value="${n.node}">${n.node} (${n.start}-${n.end})</option>`).join('');
+      $('#startNode').value = startNode||1; $('#courseStep').value=2;
+      $('#startWeek').value=1; $('#endWeek').value=16; $('#repeatMode').value='1';
+      $('#courseName').value=''; $('#courseRoom').value=''; $('#courseTeacher').value='';
+      renderColorOptions(PRESET_COLORS[0]);
+      $('#nodeTimeFields').style.display='block'; $('#customTimeFields').style.display='none';
+      $('#deleteCourseBtn').style.display='none'; $('#modalTitle').textContent='添加课程';
+      $('#courseModal').style.display='flex';
+    }
+    function openEditModal(course) {
+      $('#courseId').value = course.id; $('#courseDay').value = course.day;
+      $('#courseName').value = course.name; $('#startWeek').value = course.startWeek;
+      $('#endWeek').value = course.endWeek; $('#repeatMode').value = course.repeat||1;
+      $('#courseRoom').value = course.room||''; $('#courseTeacher').value = course.teacher||'';
+      if(course.startNode) {
+        $('#timeType').value='node';
+        const tt = getActiveTimeTable();
+        $('#startNode').innerHTML = tt.nodes.map(n=>`<option value="${n.node}" ${n.node==course.startNode?'selected':''}>${n.node} (${n.start}-${n.end})</option>`).join('');
+        $('#courseStep').value = course.step;
+        $('#nodeTimeFields').style.display='block'; $('#customTimeFields').style.display='none';
+      } else {
+        $('#timeType').value='custom';
+        $('#startTimeCustom').value = course.startTime||'08:00'; $('#endTimeCustom').value = course.endTime||'09:40';
+        $('#nodeTimeFields').style.display='none'; $('#customTimeFields').style.display='block';
+      }
+      renderColorOptions(course.color);
+      $('#deleteCourseBtn').style.display='inline-flex';
+      $('#modalTitle').textContent='编辑课程';
+      $('#courseModal').style.display='flex';
+    }
+    function closeCourseModal() { $('#courseModal').style.display='none'; }
+    function renderColorOptions(active) {
+      const c = $('#colorOptions'); c.innerHTML = '';
+      PRESET_COLORS.forEach(color => {
+        const d = document.createElement('div'); d.className='color-option'; d.style.backgroundColor=color;
+        if(color===active) d.classList.add('active');
+        d.addEventListener('click', ()=>{ c.querySelectorAll('.color-option').forEach(o=>o.classList.remove('active')); d.classList.add('active'); });
+        c.appendChild(d);
+      });
+    }
+    $('#timeType').addEventListener('change', function() {
+      if(this.value==='node') { $('#nodeTimeFields').style.display='block'; $('#customTimeFields').style.display='none'; }
+      else { $('#nodeTimeFields').style.display='none'; $('#customTimeFields').style.display='block'; }
+    });
+    $('#courseForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+      const name = $('#courseName').value.trim(); if(!name) return showToast('请输入课程名称');
+      const ct = getActiveCourseTable(); const tt = getActiveTimeTable();
+      let startNode, step, startTime, endTime;
+      if($('#timeType').value==='node') {
+        startNode = +$('#startNode').value; step = +$('#courseStep').value;
+        const node = tt.nodes.find(n=>n.node===startNode);
+        startTime = node.start; endTime = tt.nodes[startNode+step-2]?.end || node.end;
+      } else {
+        startTime = $('#startTimeCustom').value; endTime = $('#endTimeCustom').value;
+        const sMin=timeToMin(startTime), eMin=timeToMin(endTime);
+        let sN=1; for(let i=0;i<tt.nodes.length;i++) if(timeToMin(tt.nodes[i].start)<=sMin) sN=tt.nodes[i].node;
+        startNode=sN; step=1; for(let i=sN;i<tt.nodes.length;i++) if(timeToMin(tt.nodes[i].end)>=eMin){ step=i-sN+1; break; }
+      }
+      const course = {
+        id: $('#courseId').value || Date.now(),
+        name, day:+$('#courseDay').value, startNode, step,
+        startWeek:+$('#startWeek').value, endWeek:+$('#endWeek').value,
+        repeat:+$('#repeatMode').value,
+        room:$('#courseRoom').value, teacher:$('#courseTeacher').value,
+        color:document.querySelector('.color-option.active')?.style.backgroundColor||'#ccc',
+        startTime, endTime
+      };
+      const editingId = $('#courseId').value;
+      if(editingId) {
+        const idx = ct.courses.findIndex(c=>c.id==editingId);
+        if(idx>=0) ct.courses[idx]=course;
+      } else ct.courses.push(course);
+      saveData(); refreshUI(); closeCourseModal(); showToast(editingId?'课程已更新':'课程已添加');
+    });
+    $('#deleteCourseBtn').addEventListener('click', ()=>{
+      if(!$('#courseId').value) return;
+      if(confirm('确定删除？')) {
+        const ct = getActiveCourseTable();
+        ct.courses = ct.courses.filter(c=>c.id != $('#courseId').value);
+        saveData(); refreshUI(); closeCourseModal(); showToast('已删除');
+      }
+    });
+    $('#cancelCourseBtn').addEventListener('click', closeCourseModal);
+    $('#courseModal').addEventListener('click', e => { if(e.target===$('#courseModal')) closeCourseModal(); });
+
+    // ---------- 时间表管理 ----------
+    function renderTimeTableList() {
+      const list = $('#timeTableList'); list.innerHTML = '';
+      timeTables.forEach(tt => {
+        const div = document.createElement('div'); div.className='list-item';
+        div.innerHTML = `<span>${tt.name} (${tt.nodes.length}节)</span>`;
+        if(tt.id===activeTimeTableId) div.classList.add('active');
+        div.addEventListener('click', ()=> switchTimeTable(tt.id));
+        const editBtn = document.createElement('button'); editBtn.textContent='✏️'; editBtn.className='btn btn-ghost';
+        editBtn.addEventListener('click', e=>{ e.stopPropagation(); openEditTimeTable(tt.id); });
+        div.appendChild(editBtn);
+        list.appendChild(div);
+      });
+    }
+    function openEditTimeTable(id) {
+      const tt = timeTables.find(t=>t.id===id); if(!tt) return;
+      $('#editTimeTableId').value = tt.id;
+      $('#editTimeTableName').value = tt.name;
+      const container = $('#editTimeNodesContainer'); container.innerHTML = '';
+      tt.nodes.forEach(n => {
+        const row = document.createElement('div'); row.className='form-row';
+        row.innerHTML = `<div class="form-group"><input class="node-num-input" type="number" value="${n.node}"></div>
+                        <div class="form-group"><input class="node-start-input" type="time" value="${n.start}"></div>
+                        <div class="form-group"><input class="node-end-input" type="time" value="${n.end}"></div>
+                        <button class="btn btn-danger del-node-btn">🗑</button>`;
+        row.querySelector('.del-node-btn').addEventListener('click', ()=> row.remove());
+        container.appendChild(row);
+      });
+      $('#editTimeTableModal').style.display='flex';
+    }
+    $('#addTimeNodeBtn').addEventListener('click', ()=>{
+      const row = document.createElement('div'); row.className='form-row';
+      row.innerHTML = `<div class="form-group"><input class="node-num-input" type="number" value=""></div>
+                      <div class="form-group"><input class="node-start-input" type="time" value="08:00"></div>
+                      <div class="form-group"><input class="node-end-input" type="time" value="09:00"></div>
+                      <button class="btn btn-danger del-node-btn">🗑</button>`;
+      row.querySelector('.del-node-btn').addEventListener('click', ()=> row.remove());
+      $('#editTimeNodesContainer').appendChild(row);
+    });
+    $('#saveTimeTableBtn').addEventListener('click', ()=>{
+      const id = $('#editTimeTableId').value;
+      const name = $('#editTimeTableName').value.trim() || '未命名';
+      const nodes = [];
+      $('#editTimeNodesContainer').querySelectorAll('.form-row').forEach(row => {
+        const num = row.querySelector('.node-num-input')?.value;
+        const start = row.querySelector('.node-start-input')?.value;
+        const end = row.querySelector('.node-end-input')?.value;
+        if(num && start && end) nodes.push({node:+num, start, end});
+      });
+      if(nodes.length===0) return showToast('至少需要一个节次');
+      const tt = timeTables.find(t=>t.id===id);
+      if(tt) { tt.name = name; tt.nodes = nodes.sort((a,b)=>a.node-b.node); }
+      saveData(); refreshUI(); renderTimeTableList();
+      $('#editTimeTableModal').style.display='none';
+    });
+    $('#deleteTimeTableBtn').addEventListener('click', ()=>{
+      if(timeTables.length<=1) return showToast('至少保留一个时间表');
+      if(confirm('删除此时间表？')) {
+        timeTables = timeTables.filter(t=>t.id!==$('#editTimeTableId').value);
+        if(activeTimeTableId===$('#editTimeTableId').value) activeTimeTableId = timeTables[0].id;
+        saveData(); refreshUI(); renderTimeTableList();
+        $('#editTimeTableModal').style.display='none';
+      }
+    });
+    $('#cancelEditTimeTableBtn').addEventListener('click', ()=> $('#editTimeTableModal').style.display='none');
+    $('#newTimeTableBtn').addEventListener('click', ()=>{
+      const name = prompt('时间表名称'); if(!name) return;
+      const id = 't'+Date.now();
+      timeTables.push({ id, name, nodes: getActiveTimeTable().nodes.map(n=>({...n})) });
+      saveData(); renderTimeTableList();
+    });
+    function switchTimeTable(newId) {
+      const newTT = timeTables.find(t=>t.id===newId); if(!newTT) return;
+      const ct = getActiveCourseTable();
+      const conflict = ct.courses.some(c => (c.startNode+c.step-1) > newTT.nodes.length);
+      if(conflict && !confirm('部分课程节次超出新时间表范围，是否自动适配？')) return;
+      activeTimeTableId = newId;
+      saveData(); refreshUI(); renderTimeTableList();
+      $('#timeTableModal').style.display='none';
+    }
+
+    // ---------- 课表管理 ----------
+    function renderCourseTableList() {
+      const list = $('#courseTableList'); list.innerHTML = '';
+      courseTables.forEach(ct => {
+        const div = document.createElement('div'); div.className='list-item';
+        div.innerHTML = `<span>${ct.name} (${ct.startDate})</span>`;
+        if(ct.id===activeCourseTableId) div.classList.add('active');
+        div.addEventListener('click', ()=> switchCourseTable(ct.id));
+        const editBtn = document.createElement('button'); editBtn.textContent='✏️'; editBtn.className='btn btn-ghost';
+        editBtn.addEventListener('click', e=>{ e.stopPropagation(); openEditCourseTable(ct.id); });
+        div.appendChild(editBtn);
+        list.appendChild(div);
+      });
+    }
+    function openEditCourseTable(id) {
+      const ct = courseTables.find(t=>t.id===id); if(!ct) return;
+      $('#editCourseTableId').value = ct.id;
+      $('#editCourseTableName').value = ct.name;
+      $('#editCourseTableStart').value = ct.startDate;
+      $('#editCourseTableMax').value = ct.maxWeek;
+      $('#editCourseTableModal').style.display='flex';
+    }
+    $('#saveCourseTableBtn').addEventListener('click', ()=>{
+      const id = $('#editCourseTableId').value;
+      const ct = courseTables.find(t=>t.id===id); if(!ct) return;
+      ct.name = $('#editCourseTableName').value.trim() || '未命名';
+      ct.startDate = $('#editCourseTableStart').value;
+      ct.maxWeek = +$('#editCourseTableMax').value;
+      saveData(); refreshUI(); renderCourseTableList();
+      $('#editCourseTableModal').style.display='none';
+    });
+    $('#deleteCourseTableBtn').addEventListener('click', ()=>{
+      if(courseTables.length<=1) return showToast('至少保留一个课表');
+      if(confirm('删除此课表？')) {
+        courseTables = courseTables.filter(t=>t.id!==$('#editCourseTableId').value);
+        if(activeCourseTableId===$('#editCourseTableId').value) activeCourseTableId = courseTables[0].id;
+        saveData(); refreshUI(); renderCourseTableList();
+        $('#editCourseTableModal').style.display='none';
+      }
+    });
+    $('#cancelEditCourseTableBtn').addEventListener('click', ()=> $('#editCourseTableModal').style.display='none');
+    $('#newCourseTableBtn').addEventListener('click', ()=>{
+      const name = prompt('课表名称'); if(!name) return;
+      courseTables.push({ id:'c'+Date.now(), name, startDate:'2026-03-02', maxWeek:20, courses:[] });
+      saveData(); renderCourseTableList();
+    });
+    function switchCourseTable(newId) {
+      activeCourseTableId = newId;
+      currentWeek = computeCurrentWeek();
+      saveData(); refreshUI(); renderCourseTableList();
+      $('#courseTableModal').style.display='none';
+    }
+
+    // ---------- 导入/导出 ----------
+    function generateWakeUpExport() {
+      const tt = getActiveTimeTable();
+      const ct = getActiveCourseTable();
+      const schoolName = ct.name || '未命名';
+      const schoolConfig = { courseLen:50, id:1, name:"默认", sameBreakLen:false, sameLen:false, schoolName:schoolName, theBreakLen:10 };
+      const timeNodes = [];
+      tt.nodes.forEach(n => { timeNodes.push({ endTime:n.end, node:n.node, startTime:n.start, timeTable:1 }); });
+      for(let i=tt.nodes.length; i<60; i++) { timeNodes.push({ endTime:"00:00", node:i+1, startTime:"00:00", timeTable:1 }); }
+      const tableConfig = {
+        background:"", courseTextColor:-1, id:2, itemAlpha:50, itemHeight:64, itemTextSize:12,
+        maxWeek:ct.maxWeek, nodes:tt.nodes.length, showOtherWeekCourse:true, showSat:true, showSun:true,
+        showTime:false, startDate:ct.startDate.replace(/-/g, '-'), strokeColor:-2130706433, sundayFirst:false,
+        tableName:schoolName, textColor:-16777216, timeTable:1, type:0,
+        widgetCourseTextColor:-1, widgetItemAlpha:50, widgetItemHeight:64, widgetItemTextSize:12,
+        widgetStrokeColor:-2130706433, widgetTextColor:-16777216
+      };
+      const colorArr = ct.courses.map(c => ({ color:c.color.startsWith('#')?c.color.replace('#','#ff'):c.color, courseName:c.name, credit:0.0, id:c.id, note:"", tableId:2 }));
+      const scheduleArr = ct.courses.map(c => ({
+        day:c.day, endTime:"", endWeek:c.endWeek, id:c.id, level:0, ownTime:false,
+        room:c.room||"", startNode:c.startNode, startTime:"", startWeek:c.startWeek,
+        step:c.step, tableId:2, teacher:c.teacher||"", type:{1:0,2:1,3:2}[c.repeat]||0
+      }));
+      return [JSON.stringify(schoolConfig), JSON.stringify(timeNodes), JSON.stringify(tableConfig), JSON.stringify(colorArr), JSON.stringify(scheduleArr)].join('\n');
+    }
+    async function copyToClipboard(text) {
+      try { await navigator.clipboard.writeText(text); return true; }
+      catch {
+        const ta = document.createElement('textarea'); ta.value = text; ta.style.position='fixed'; ta.style.opacity='0';
+        document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); return true;
+      }
+    }
+    $('#exportDataBtn').addEventListener('click', async function(){
+      const exportStr = generateWakeUpExport();
+      $('#importData').value = exportStr;
+      const ok = await copyToClipboard(exportStr);
+      showToast(ok?'✅ 已复制到剪贴板':'❌ 复制失败，请手动复制文本框');
+    });
+    $('#confirmImportBtn').addEventListener('click', ()=>{
+      const raw = $('#importData').value.trim(); if(!raw) return showToast('请粘贴数据');
+      try {
+        const objs = [];
+        raw.split('\n').forEach(line => { const t=line.trim(); if(t) try { objs.push(JSON.parse(t)); } catch(e){} });
+        const scheduleArr = objs.find(o=>Array.isArray(o)&&o[0]?.hasOwnProperty('startNode'));
+        const colorArr = objs.find(o=>Array.isArray(o)&&o[0]?.hasOwnProperty('courseName'));
+        const configObj = objs.find(o=>o.hasOwnProperty('maxWeek')&&o.hasOwnProperty('startDate'));
+        if(scheduleArr) {
+          const colorMap = {}; if(colorArr) colorArr.forEach(c=>colorMap[c.id]=c.color);
+          const courses = scheduleArr.map(s => ({
+            id:s.id||Date.now(), name:(colorArr?.find(c=>c.id===s.id)?.courseName||'未命名'),
+            day:s.day, startNode:s.startNode, step:s.step||1, startWeek:s.startWeek, endWeek:s.endWeek,
+            repeat:{0:1,1:2,2:3}[s.type]||1, room:s.room||'', teacher:s.teacher||'',
+            color:colorMap[s.id]||PRESET_COLORS[0], startTime:'08:00', endTime:'09:00'
+          }));
+          const newTable = { id:'c'+Date.now(), name:configObj?.tableName||'导入课表', startDate:configObj?.startDate||'2026-03-02', maxWeek:configObj?.maxWeek||20, courses };
+          courseTables.push(newTable);
+          activeCourseTableId = newTable.id;
+          currentWeek = computeCurrentWeek();
+          saveData(); refreshUI();
+          $('#importModal').style.display='none';
+          showToast('导入成功，已创建新课表');
+        } else showToast('未找到有效排课数据');
+      } catch(e) { showToast('解析失败'); }
+    });
+
+    // ---------- 其他事件 ----------
+    $('#timeTableBtn').addEventListener('click', ()=>{ renderTimeTableList(); $('#timeTableModal').style.display='flex'; });
+    $('#closeTimeTableBtn').addEventListener('click', ()=> $('#timeTableModal').style.display='none');
+    $('#courseTableBtn').addEventListener('click', ()=>{ renderCourseTableList(); $('#courseTableModal').style.display='flex'; });
+    $('#closeCourseTableBtn').addEventListener('click', ()=> $('#courseTableModal').style.display='none');
+    $('#addCourseBtn').addEventListener('click', ()=> openAddModal(todayDayIndex()+1, 1));
+    $('#importShareBtn').addEventListener('click', ()=> $('#importModal').style.display='flex');
+    $('#cancelImportBtn').addEventListener('click', ()=> $('#importModal').style.display='none');
+    $('#prevWeekBtn').addEventListener('click', ()=> changeWeek(-1));
+    $('#nextWeekBtn').addEventListener('click', ()=> changeWeek(1));
+    $('#todayBtn').addEventListener('click', ()=>{ currentWeek=computeCurrentWeek(); refreshUI(); });
+    document.addEventListener('keydown', e => {
+      if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA') return;
+      if(e.key==='ArrowLeft') changeWeek(-1);
+      if(e.key==='ArrowRight') changeWeek(1);
+    });
+    function changeWeek(d) { const w=currentWeek+d; if(w<1||w>getActiveCourseTable().maxWeek) return; currentWeek=w; refreshUI(); }
+
+    let toastTimer;
+    function showToast(msg) {
+      const t = $('#toast'); t.textContent=msg; t.classList.add('show');
+      clearTimeout(toastTimer); toastTimer = setTimeout(()=>t.classList.remove('show'), 2000);
+    }
+
+    loadData();
+    currentWeek = computeCurrentWeek();
+    refreshUI();
+    setInterval(updateTimeLine, 60000);
+    window.addEventListener('resize', refreshUI);
+  })();
+</script>
+
+<!-- ========== 注册 Service Worker（离线缓存） ========== -->
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js')
+        .then(reg => console.log('Service Worker 已注册', reg))
+        .catch(err => console.log('Service Worker 注册失败', err));
+    });
+  }
+</script>
+</body>
+</html>
